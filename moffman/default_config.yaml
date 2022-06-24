@@ -1,0 +1,34 @@
+general:
+    log_level: INFO  # Logging level [DEBUG, INFO, WARNING, ERROR, CRITICAL]
+
+google_api:
+    service_account_key_path: # Path to the Google API credentials JSON file
+        oc_default: null
+        oc_schema:
+            type: string
+            nullable: false
+
+calendar:
+#    calendar_id:  # ID of the calendar to be used for attendance.
+#        oc_default: null
+#        oc_schema:
+#            type: string
+#            nullable: false
+    colors: # Event colors (defined as indexes to the Google calendar color palette)
+        unapproved:  # Color of approval-pending registration event.
+            oc_default: 4
+            oc_schema:
+                type: integer
+        approved: # Color of approved registration event.
+            oc_default: 5
+            oc_schema:
+                type: integer
+    checking_range: # Checking range for event lookup in the manual update. The values are relative to the time of update, and are defined as Arrow shift arguments (https://arrow.readthedocs.io/en/latest/#arrow.arrow.Arrow.shift)
+        min:
+            weeks: -1
+        max:
+            weeks: 2
+
+rest_api:  # Configuration of the REST API endpoint
+    addr: 0.0.0.0
+    port: 8080

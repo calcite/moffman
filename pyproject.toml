@@ -1,0 +1,72 @@
+[tool.poetry]
+name = "moffman"
+version = "0.1.0"
+description = "Microservice for managing team attendance in multiple offices."
+authors = ["Josef Nevrly <josef.nevrly@gmail.com>"]
+license = "MIT license"
+
+readme = "README.rst"
+
+repository = "https://github.com/JNevrly/moffman"
+
+documentation = "https://moffman.readthedocs.io"
+
+homepage = "https://github.com/JNevrly/moffman"
+
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10"
+]
+
+[tool.poetry.dependencies]
+# Python version
+python = "^3.8.0"
+
+# List project dependencies here
+click = "^8.0.1"
+onacol = "^0.3.0"
+aiohttp = "^3.7.4"
+sockjs = "^0.11.0"
+aiogoogle = "^4.2.0"
+arrow = "^1.2.2"
+
+
+[tool.poetry.scripts]
+moffman = "moffman.cli:main"
+
+
+[tool.poetry.dev-dependencies]
+bump2version = "^0.5.0"
+pip = "^18.1"
+wheel = "^0.32.1"
+watchdog = "^0.9.0"
+flake8 = "^3.5.0"
+tox = "^3.5.2"
+coverage = {extras = ["toml"], version = "^5.5"}
+Sphinx = "^4.1.1"
+sphinx-rtd-theme = "^0.5.2"
+twine = "^3.4.2"
+
+setuptools = "^40.5.0"
+rstcheck = "^3.3.1"
+ptpython = "^2.0.4"
+mypy = "^0.910"
+jupyter = "^1.0.0"
+
+[tool.coverage.run]
+omit = [".*", "*/site-packages/*"]
+source = ["moffman"]
+relative_files = true
+
+[tool.coverage.report]
+fail_under = 100
+
+# In case of problems with editable installs, see
+# https://github.com/python-poetry/poetry/issues/2343#issuecomment-903647050
+#[build-system]
+#requires = ["poetry-core>=1.0.0", "setuptools>=49.0.0"]
+#build-backend = "poetry.core.masonry.api"

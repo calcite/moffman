@@ -1,0 +1,4 @@
+
+
+class MoffmanError(Exception):
+    pass
