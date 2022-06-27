@@ -1,10 +1,21 @@
-import json
-import asyncio
+"""
+.. module: moffman.calendar_handler
+   :synopsis: Classes and methods for handling Google Calendar API.
+.. moduleauthor:: "Josef Nevrly <josef.nevrly@gmail.com>"
+"""
+
+import logging
+
 from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
 import uuid
 from contextlib import asynccontextmanager
 import arrow
+
+from .dynamic_configs import ManualUserManager
+
+
+logger = logging.getLogger("moffman.calendar")
 
 
 def get_event_id(user: str, request_dt: str, start: str, end: str):
@@ -38,14 +49,13 @@ class GoogleCalendarHandler:
     EVENT_PROCESSED = "event_processed"
 
     def __init__(self, config, service_account_key, office_list,
-                 manual_user_list):
+                 manual_user_list: ManualUserManager):
 
         self._config = config
         self._manual_user_list = manual_user_list
         self._office_list = office_list
 
         # Initialize credentials
-        # service_account_key = json.load(open(r'beo-handler-2ef08b2a6c97.json'))
         self._google_creds = ServiceAccountCreds(
             scopes=[
                 "https://www.googleapis.com/auth/calendar",
@@ -58,7 +68,8 @@ class GoogleCalendarHandler:
         # self._calendar_id = self._config["calendar_id"]
 
         # Sync token
-        self._int_sync_token = None
+        self._int_sync_tokens = {office: None for office in
+                                 self._office_list.office_names}
 
         # TODO - check if all calendars in the office list are added in the
         #        service_accounts_list and are accesible. If not, add.
@@ -86,16 +97,16 @@ class GoogleCalendarHandler:
         except KeyError:
             return True
 
-    def _is_event_from_registered_user(self, event):
+    async def _is_event_from_registered_user(self, event):
         try:
-            return (event["creator"]["email"] in self._manual_user_list)
+            return await self._manual_user_list.check_user(event["creator"]["email"])
         except KeyError:
             return False
 
     @asynccontextmanager
     async def _calendar_api(self):
         async with Aiogoogle(
-            service_account_creds=self._google_creds) as aiogoogle:
+           service_account_creds=self._google_creds) as aiogoogle:
             calendar_v3 = await aiogoogle.discover("calendar", "v3")
             yield aiogoogle, calendar_v3
 
@@ -167,12 +178,16 @@ class GoogleCalendarHandler:
                                             self.EVENT_PROCESSED: True}}
                                         )
 
-    async def process_new_manual_events(self):
+    async def update_manual_events(self):
+        for office in self._office_list.office_names:
+            await self.process_new_manual_events(office)
+
+    async def process_new_manual_events(self, office):
         search_params = {}
 
         # If we have sync token, let's use it
-        if self._sync_token is not None:
-            search_params["syncToken"] = self._sync_token
+        if self._sync_token[office] is not None:
+            search_params["syncToken"] = self._sync_token[office]
 
         while True:
             if not search_params:
@@ -185,8 +200,9 @@ class GoogleCalendarHandler:
 
             try:
                 print(search_params)
-                events = await self._get_events(self._calendar_id,
-                                                **search_params)
+                events = await self._get_events(
+                    self._office_list.get_id(office), **search_params
+                )
                 print("searched")
                 break
             except HTTPError as e:
@@ -206,14 +222,16 @@ class GoogleCalendarHandler:
         manual_events = filter(self._is_event_manual, events["items"])
 
         # Filter out events that are from registered sources
-        manual_events = filter(self._is_event_from_registered_user,
-                               manual_events)
-
+        new_manual_events = []
         for event in manual_events:
+            if await self._is_event_from_registered_user(event):
+                new_manual_events.append(event)
+
+        for event in new_manual_events:
             # TODO: Do the actual form-filling
             print(event)
 
             # TODO: Update the event so that it's marked as processed
 
         # Update sync token (now disabled for debug)
-        # self._sync_token = new_sync_token
+        # self._sync_token[office] = new_sync_token

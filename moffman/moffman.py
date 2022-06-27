@@ -11,10 +11,11 @@ import json
 
 from .http_handler import HttpHandler
 from .calendar_handler import GoogleCalendarHandler
+from .spreadsheet_handler import GoogleSpreadsheetHandler
+from .dynamic_configs import ManualUserManager
 
 
 logger = logging.getLogger("moffman")
-
 
 
 class MultiOfficeManager:
@@ -28,12 +29,23 @@ class MultiOfficeManager:
             open(self._config["google_api"]["service_account_key_path"])
         )
 
+        # Spreadsheet handling
+        self._spreadsheet_handler = GoogleSpreadsheetHandler(
+            self._service_account_key
+        )
+
+        # Manual users
+        self._manual_user_manager = ManualUserManager(
+            self._config["manual_users"],
+            spreadsheet_handler=self._spreadsheet_handler
+        )
+
         # Calendar handling
         self._calendar_handler = GoogleCalendarHandler(
             self._config["calendar"],
             self._service_account_key,
             OFFICE_LIST,
-            MANUAL_USER_LIST
+            self._manual_user_manager
         )
 
         # REST API
