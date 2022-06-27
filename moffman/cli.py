@@ -80,11 +80,12 @@ def main(ctx, config, get_config_template):
     logging.getLogger("aiohttp").setLevel(logging.WARNING)
     logging.getLogger("sockjs").setLevel(logging.WARNING)
 
+    click.secho("Running moffman application ..", fg='green')
+
     # Setup your main classes here
     _moffman = MultiOfficeManager(config_manager.config, loop=loop)
 
     try:
-        click.secho("Running moffman application ..", fg='green')
         # Start your app here
         _moffman.start()
 

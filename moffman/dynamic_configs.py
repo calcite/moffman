@@ -6,6 +6,7 @@
 
 import logging
 import time
+import asyncio
 
 from .spreadsheet_handler import GoogleSpreadsheetHandler
 
@@ -16,8 +17,10 @@ logger = logging.getLogger("moffman.user_manager")
 class ManualUserManager:
 
     def __init__(self, config,
+                 loop=None,
                  spreadsheet_handler: GoogleSpreadsheetHandler = None):
         self._config = config
+        self._loop = loop or asyncio.get_event_loop()
 
         # Initialize static users
         self._static_users = {}
@@ -32,7 +35,9 @@ class ManualUserManager:
         # Dynamic update
         self._last_update = None
         if self._is_dynamic_config:
-            await self._update_dynamic_config()
+            self._loop.create_task(self._update_dynamic_config())
+
+        logger.info("Manual user list initialized.")
 
     async def check_user(self, user):
         if user in self._static_users:
@@ -79,13 +84,17 @@ class ManualUserManager:
 class OfficeManager:
 
     def __init__(self, config,
+                 loop = None,
                  spreadsheet_handler: GoogleSpreadsheetHandler = None):
         self._config = config
+        self._loop = loop or asyncio.get_event_loop()
 
         # Static list
         self._static_office_list = {}
         for office in self._config["office_list"]:
             self._static_office_list[office["name"]] = office["id"]
+
+        logger.info("Office list initialized.")
 
     @property
     def office_names(self):

@@ -12,7 +12,7 @@ import json
 from .http_handler import HttpHandler
 from .calendar_handler import GoogleCalendarHandler
 from .spreadsheet_handler import GoogleSpreadsheetHandler
-from .dynamic_configs import ManualUserManager
+from .dynamic_configs import ManualUserManager, OfficeManager
 
 
 logger = logging.getLogger("moffman")
@@ -40,11 +40,17 @@ class MultiOfficeManager:
             spreadsheet_handler=self._spreadsheet_handler
         )
 
+        # Offices
+        self._office_manager = OfficeManager(
+            self._config["offices"],
+            spreadsheet_handler=self._spreadsheet_handler
+        )
+
         # Calendar handling
         self._calendar_handler = GoogleCalendarHandler(
             self._config["calendar"],
             self._service_account_key,
-            OFFICE_LIST,
+            self._office_manager,
             self._manual_user_manager
         )
 

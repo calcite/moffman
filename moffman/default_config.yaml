@@ -30,6 +30,9 @@ manual_users:  # = External users that have access only to the Google Docs/Calen
 offices:  # Offices managed by this application
     office_list: []  # List of items in format {name: <office name>, id: <Google calendar id>}
     google_config:
+        sheet_id: null
+        range: null
+        update_interval: 7200
         oc_schema: google_config_item
 
 calendar:
