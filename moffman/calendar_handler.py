@@ -3,7 +3,7 @@
    :synopsis: Classes and methods for handling Google Calendar API.
 .. moduleauthor:: "Josef Nevrly <josef.nevrly@gmail.com>"
 """
-
+import asyncio
 import logging
 
 from aiogoogle import Aiogoogle, HTTPError
@@ -48,12 +48,13 @@ def search_range(min_time, max_time):
 class GoogleCalendarHandler:
     EVENT_PROCESSED = "event_processed"
 
-    def __init__(self, config, service_account_key, office_list,
-                 manual_user_list: ManualUserManager):
+    def __init__(self, config, service_account_key, office_list: OfficeManager,
+                 manual_user_list: ManualUserManager, loop=None):
 
         self._config = config
         self._manual_user_list = manual_user_list
         self._office_list = office_list
+        self._loop = loop or asyncio.get_event_loop()
 
         # Initialize credentials
         self._google_creds = ServiceAccountCreds(
@@ -71,8 +72,39 @@ class GoogleCalendarHandler:
         self._int_sync_tokens = {office: None for office in
                                  self._office_list.keys()}
 
-        # TODO - check if all calendars in the office list are added in the
-        #        service_accounts_list and are accesible. If not, add.
+        # Check if all calendars in the office list are added in the
+        # service account's calendar list
+        self._loop.create_task(self.assert_calendars_added())
+
+    async def _list_calendars(self):
+        async with self._calendar_api() as (aiogoogle, calendar_v3):
+            return await aiogoogle.as_service_account(
+                calendar_v3.calendarList.list())
+
+    async def assert_calendars_added(self):
+        # https://stackoverflow.com/a/60039606
+        logger.info("Checking all connected calendars...")
+        calendar_list = await self._list_calendars()
+        calendar_list = calendar_list["items"]
+
+        calendars_to_add = [cal_id for _, cal_id in self._office_list.items()
+                            if not any(cal["id"] == cal_id for cal in
+                                       calendar_list)
+                            ]
+
+        if not calendars_to_add:
+            logger.info("All calendars valid.")
+            return
+
+        # Add calendars
+        for cal_id in calendars_to_add:
+            async with self._calendar_api() as (aiogoogle, calendar_v3):
+                body = {
+                    "id": cal_id
+                }
+                await aiogoogle.as_service_account(
+                    calendar_v3.calendarList.insert(json=body))
+                logger.info(f"Added calendar {cal_id}.")
 
     def _get_sync_token(self, office):
         # TODO - handle persistence

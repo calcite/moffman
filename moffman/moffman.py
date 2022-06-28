@@ -96,6 +96,7 @@ class MultiOfficeManager:
     async def _on_dynamic_config_update(self):
         await self._office_manager.update_dynamic_config()
         await self._manual_user_manager.update_dynamic_config()
+        await self._calendar_handler.assert_calendars_added()
 
     async def _on_attendance_reservation(self, reservation_payload):
         if reservation_payload["approved"]:
