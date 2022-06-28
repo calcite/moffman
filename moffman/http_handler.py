@@ -72,7 +72,8 @@ class HttpHandler:
 
     def __init__(self, loop,
                  # proxy_logger, log_level=logging.NOTSET,
-                 on_reservation_clbk=None
+                 on_reservation_clbk=None,
+                 on_config_update_clbk=None,
                  ):
 
         self._loop = loop
@@ -85,6 +86,7 @@ class HttpHandler:
         self._logger = logging.getLogger("moffman.REST")
 
         self._on_reservation_clbk = on_reservation_clbk
+        self._on_config_update_clbk = on_config_update_clbk
 
         # Logging
         # self._proxy_logger = proxy_logger
@@ -152,6 +154,15 @@ class HttpHandler:
 
         return web.Response()
 
+    async def _update_dynamic_config(self, request):
+        try:
+            await self._on_config_update_clbk()
+        except Exception as e:
+            msg = f"Error updating dynamic config reservation: {str(e)}"
+            self._logger.error(msg)
+            return web.json_response({}, status=500, reason=msg)
+        return web.Response()
+
     def _init_router(self):
         # Basic assets
         # self._app.router.add_get('/', self._index)
@@ -162,9 +173,12 @@ class HttpHandler:
         # self._app.router.add_get('/favicon.ico', self._favicon)
         # self._app.router.add_get('/favicon-32x32.png', self._favicon_32)
 
-        self._app.router.add_post('/api/reservations',
+        self._app.router.add_post('/api/v1/reservations',
                                   self._process_reservation
                                   )
+        self._app.router.add_get('/api/v1/config_update',
+                                 self._update_dynamic_config
+                                 )
         # self._app.router.add_post('/api/command', self._set_state)
 
         # sockjs.add_endpoint(self._app, self._sockjs_handler, name='notifier',

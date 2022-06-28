@@ -12,7 +12,7 @@ import uuid
 from contextlib import asynccontextmanager
 import arrow
 
-from .dynamic_configs import ManualUserManager
+from .dynamic_configs import ManualUserManager, OfficeManager
 
 
 logger = logging.getLogger("moffman.calendar")
@@ -69,20 +69,18 @@ class GoogleCalendarHandler:
 
         # Sync token
         self._int_sync_tokens = {office: None for office in
-                                 self._office_list.office_names}
+                                 self._office_list.keys()}
 
         # TODO - check if all calendars in the office list are added in the
         #        service_accounts_list and are accesible. If not, add.
 
-    @property
-    def _sync_token(self):
+    def _get_sync_token(self, office):
         # TODO - handle persistence
-        return self._int_sync_token
+        return self._int_sync_tokens[office]
 
-    @_sync_token.setter
-    def _sync_token(self, new_token):
+    def _store_sync_token(self, office, token):
         # TODO - handle persistence
-        self._int_sync_token = new_token
+        self._int_sync_tokens[office] = token
 
     def _is_event_unprocessed(self, event):
         try:
@@ -97,11 +95,8 @@ class GoogleCalendarHandler:
         except KeyError:
             return True
 
-    async def _is_event_from_registered_user(self, event):
-        try:
-            return await self._manual_user_list.check_user(event["creator"]["email"])
-        except KeyError:
-            return False
+    def _is_event_from_registered_user(self, event):
+        return event["creator"]["email"] in self._manual_user_list
 
     @asynccontextmanager
     async def _calendar_api(self):
@@ -179,15 +174,16 @@ class GoogleCalendarHandler:
                                         )
 
     async def update_manual_events(self):
-        for office in self._office_list.office_names:
+        for office in self._office_list.keys():
             await self.process_new_manual_events(office)
 
     async def process_new_manual_events(self, office):
         search_params = {}
 
         # If we have sync token, let's use it
-        if self._sync_token[office] is not None:
-            search_params["syncToken"] = self._sync_token[office]
+        sync_token = self._get_sync_token(office)
+        if sync_token is not None:
+            search_params["syncToken"] = sync_token
 
         while True:
             if not search_params:
@@ -222,16 +218,14 @@ class GoogleCalendarHandler:
         manual_events = filter(self._is_event_manual, events["items"])
 
         # Filter out events that are from registered sources
-        new_manual_events = []
-        for event in manual_events:
-            if await self._is_event_from_registered_user(event):
-                new_manual_events.append(event)
+        manual_events = filter(self._is_event_from_registered_user,
+                               manual_events)
 
-        for event in new_manual_events:
+        for event in manual_events:
             # TODO: Do the actual form-filling
             print(event)
 
             # TODO: Update the event so that it's marked as processed
 
         # Update sync token (now disabled for debug)
-        # self._sync_token[office] = new_sync_token
+        # self._store_sync_token(office, new_sync_token)

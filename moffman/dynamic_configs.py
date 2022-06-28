@@ -7,101 +7,146 @@
 import logging
 import time
 import asyncio
+from itertools import chain
 
 from .spreadsheet_handler import GoogleSpreadsheetHandler
+from .utils import MoffmanError
+from abc import abstractmethod, ABCMeta
+from collections.abc import Mapping
 
 
 logger = logging.getLogger("moffman.user_manager")
 
 
-class ManualUserManager:
+class DynamicConfigManager(Mapping, metaclass=ABCMeta):
+
+    @abstractmethod
+    def __init__(self, static_items, google_config,
+                 loop=None,
+                 spreadsheet_handler: GoogleSpreadsheetHandler = None):
+
+        self._loop = loop or asyncio.get_event_loop()
+        self._static_items = static_items
+
+        # Dynamic items
+        self._dynamic_items = {}
+        self._google_config = google_config
+        self._spreadsheet_handler = spreadsheet_handler
+        self._has_dynamic_config = self._is_google_config_set()
+        self._last_update = None
+
+        # Initial dynamic update
+        if self._has_dynamic_config:
+            self._loop.create_task(self.update_dynamic_config())
+
+    def _is_google_config_set(self):
+        try:
+            return ((self._spreadsheet_handler is not None) and
+                    (self._google_config["sheet_id"] is not None) and
+                    (self._google_config["range"] is not None)
+                    )
+        except KeyError:
+            return False
+
+    def __contains__(self, item):
+        if item in self._static_items:
+            return True
+
+        if self._has_dynamic_config:
+            return item in self._dynamic_users
+        else:
+            return False
+
+    def __getitem__(self, key):
+        try:
+            return self._static_items[key]
+        except KeyError:
+            return self._dynamic_items[key]
+
+    def __iter__(self):
+        return chain(self._static_items.__iter__(),
+                     self._dynamic_items.__iter__()
+                     )
+
+    def __len__(self):
+        return len(self._static_items) + len(self._dynamic_items)
+
+    @property
+    def has_dynamic_config(self):
+        return self._has_dynamic_config
+
+    @property
+    def requires_update_scheduling(self):
+        return (self.has_dynamic_config and
+                (self._google_config["update_interval"] is not None))
+
+    @property
+    def update_interval(self):
+        return self._google_config["update_interval"]
+
+    @abstractmethod
+    async def update_dynamic_config(self):
+        data = await self._spreadsheet_handler.get_range(
+            self._google_config["sheet_id"],
+            self._google_config["range"]
+        )
+
+        self._last_update = time.monotonic()
+
+        # Dynamic users are reset during each update
+        self._dynamic_items = {}
+
+        return data
+
+
+class ManualUserManager(DynamicConfigManager):
 
     def __init__(self, config,
                  loop=None,
                  spreadsheet_handler: GoogleSpreadsheetHandler = None):
         self._config = config
-        self._loop = loop or asyncio.get_event_loop()
 
-        # Initialize static users
-        self._static_users = {}
+        # Initialize static users from config
+        static_users = {}
         for static_user in self._config["user_list"]:
-            self._static_users[static_user["id"]] = static_user["name"]
+            static_users[static_user["id"]] = static_user["name"]
 
-        # Dynamic users
-        self._dynamic_users = {}
-        self._spreadsheet_handler = spreadsheet_handler
-        self._is_dynamic_config = self._is_google_config_set()
-
-        # Dynamic update
-        self._last_update = None
-        if self._is_dynamic_config:
-            self._loop.create_task(self._update_dynamic_config())
+        super().__init__(static_users, self._config["google_config"],
+                         loop=loop, spreadsheet_handler=spreadsheet_handler)
 
         logger.info("Manual user list initialized.")
 
-    async def check_user(self, user):
-        if user in self._static_users:
-            return True
-
-        if self._is_dynamic_config:
-            # Check dynamic config
-            if ((time.monotonic() - self._last_update) > self._config[
-               "google_config"]["update_interval"]):
-                await self._update_dynamic_config()
-
-            return user in self._dynamic_users
-
-        else:
-            return False
-
-    def _is_google_config_set(self):
-        try:
-            return ((self._spreadsheet_handler is not None) and
-                    (self._config["google_config"]["sheet_id"] is not None) and
-                    (self._config["google_config"]["range"] is not None)
-                    )
-        except KeyError:
-            return False
-
-    async def _update_dynamic_config(self):
-        data = await self._spreadsheet_handler.get_range(
-            self._config["google_config"]["sheet_id"],
-            self._config["google_config"]["range"]
-        )
-
-        # Dynamic users are reset during each update
-        self._dynamic_users = {}
+    async def update_dynamic_config(self):
+        data = await super().update_dynamic_config()
 
         for name, email in data["values"]:
-            self._dynamic_users[email] = name
-
-        self._last_update = time.monotonic()
-        print(self._dynamic_users)
+            self._dynamic_items[email] = name
 
         logger.debug("User manager updated from spreadsheet.")
 
 
-class OfficeManager:
+class OfficeManager(DynamicConfigManager):
 
     def __init__(self, config,
-                 loop = None,
+                 loop=None,
                  spreadsheet_handler: GoogleSpreadsheetHandler = None):
         self._config = config
-        self._loop = loop or asyncio.get_event_loop()
 
-        # Static list
-        self._static_office_list = {}
+        # Initialize static offices from config
+        static_office_list = {}
         for office in self._config["office_list"]:
-            self._static_office_list[office["name"]] = office["id"]
+            static_office_list[office["name"]] = office["id"]
+
+        super().__init__(static_office_list, self._config["google_config"],
+                         loop=loop, spreadsheet_handler=spreadsheet_handler)
 
         logger.info("Office list initialized.")
 
-    @property
-    def office_names(self):
-        return list(self._static_office_list.keys())
+    async def update_dynamic_config(self):
+        data = await super().update_dynamic_config()
 
-    def get_id(self, office):
-        return self._static_office_list[office]
+        for office_id, calendar_id in data["values"]:
+            self._dynamic_items[office_id] = calendar_id
 
-
+        logger.debug("Office list updated from spreadsheet.")
 

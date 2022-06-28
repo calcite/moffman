@@ -1,5 +1,9 @@
 general:
     log_level: INFO  # Logging level [DEBUG, INFO, WARNING, ERROR, CRITICAL]
+    manual_calendar_check_interval:  # Interval to check for manually added events.
+        oc_default: 7200
+        oc_schema:
+            type: integer
 
 google_api:
     service_account_key_path: # Path to the Google API credentials JSON file
@@ -21,10 +25,11 @@ manual_users:  # = External users that have access only to the Google Docs/Calen
             oc_schema:
                 type: string
                 nullable: true
-        update_interval:  # Min. interval between updates [seconds]
-            oc_default: 7200
+        update_interval:  # Min. interval between updates [seconds], null if automatic update is not necessary
+            oc_default: null
             oc_schema:
                 type: integer
+                nullable: true
         oc_schema_id: google_config_item
 
 offices:  # Offices managed by this application
@@ -32,7 +37,7 @@ offices:  # Offices managed by this application
     google_config:
         sheet_id: null
         range: null
-        update_interval: 7200
+        update_interval: null
         oc_schema: google_config_item
 
 calendar:
@@ -41,10 +46,6 @@ calendar:
 #        oc_schema:
 #            type: string
 #            nullable: false
-    manual_event_check_interval:  # Interval to check for manually added events.
-        oc_default: 3600
-        oc_schema:
-            type: integer
     colors: # Event colors (defined as indexes to the Google calendar color palette)
         unapproved:  # Color of approval-pending registration event.
             oc_default: 4

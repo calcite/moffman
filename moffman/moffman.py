@@ -8,6 +8,9 @@
 import asyncio
 import logging
 import json
+import datetime
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from .http_handler import HttpHandler
 from .calendar_handler import GoogleCalendarHandler
@@ -37,12 +40,14 @@ class MultiOfficeManager:
         # Manual users
         self._manual_user_manager = ManualUserManager(
             self._config["manual_users"],
+            loop=loop,
             spreadsheet_handler=self._spreadsheet_handler
         )
 
         # Offices
         self._office_manager = OfficeManager(
             self._config["offices"],
+            loop=loop,
             spreadsheet_handler=self._spreadsheet_handler
         )
 
@@ -56,9 +61,41 @@ class MultiOfficeManager:
 
         # REST API
         self._http_handler = HttpHandler(
-            self._loop, on_reservation_clbk=self._on_attendance_reservation
+            self._loop,
+            on_reservation_clbk=self._on_attendance_reservation,
+            on_config_update_clbk=self._on_dynamic_config_update
         )
         self._http_task = None
+
+        # Scheduler
+        self._scheduler = AsyncIOScheduler()
+        self._scheduler.add_job(
+            self.check_calendar_for_manual_events,
+            'interval',
+            seconds=self._config["general"]["manual_calendar_check_interval"],
+        )
+
+        if self._office_manager.requires_update_scheduling:
+            self._scheduler.add_job(
+                self._office_manager.update_dynamic_config,
+                'interval',
+                seconds=self._office_manager.update_interval
+            )
+
+        if self._manual_user_manager.requires_update_scheduling:
+            self._scheduler.add_job(
+                self._manual_user_manager.update_dynamic_config,
+                'interval',
+                seconds=self._manual_user_manager.update_interval
+            )
+
+    async def check_calendar_for_manual_events(self):
+        logger.debug("Running manual event update task.")
+        await self._calendar_handler.update_manual_events()
+
+    async def _on_dynamic_config_update(self):
+        await self._office_manager.update_dynamic_config()
+        await self._manual_user_manager.update_dynamic_config()
 
     async def _on_attendance_reservation(self, reservation_payload):
         if reservation_payload["approved"]:
@@ -80,12 +117,22 @@ class MultiOfficeManager:
             )
 
     def start(self):
+
+        # Run initial manual event check
+        self._loop.create_task(self.check_calendar_for_manual_events())
+
         # REST API
         self._http_task = self._loop.create_task(self._http_handler.run(
             host=self._config['rest_api']['addr'],
             port=self._config['rest_api']['port']
         ))
 
+        # Scheduler
+        self._scheduler.start()
+
     def stop(self):
         # REST API
         self._http_handler.shutdown()
+
+        # Scheduler
+        self._scheduler.shutdown()
