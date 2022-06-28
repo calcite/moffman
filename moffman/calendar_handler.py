@@ -13,6 +13,11 @@ from contextlib import asynccontextmanager
 import arrow
 
 from .dynamic_configs import ManualUserManager, OfficeManager
+from .utils import MoffmanError
+
+
+class CalendarError(MoffmanError):
+    pass
 
 
 logger = logging.getLogger("moffman.calendar")
@@ -196,14 +201,35 @@ class GoogleCalendarHandler:
                                        end_date, office):
         person_name = person
         event_id = get_event_id(person, request_dt, start_date, end_date)
-        return await self._modify_event(event_id, start_date, end_date,
-                                        self._office_list[office],
-                                        summary=person_name,
-                                        colorId=self._config["colors"][
-                                            "approved"],
-                                        extendedProperties={"private": {
-                                            self.EVENT_PROCESSED: True}}
-                                        )
+        try:
+            return await self._modify_event(event_id, start_date, end_date,
+                                            self._office_list[office],
+                                            summary=person_name,
+                                            colorId=self._config["colors"][
+                                                "approved"],
+                                            extendedProperties={"private": {
+                                                self.EVENT_PROCESSED: True}}
+                                            )
+        except HTTPError as hte:
+            if hte.res.status_code == 404:
+                # Unapproved event doesn't exist, let's make new one
+                logger.info("Adding directly-approved event.")
+                try:
+                    await self._add_event(
+                        person_name, start_date, end_date,
+                        self._office_list[office],
+                        event_id=event_id,
+                        color_id=self._config["colors"]["approved"],
+                        extended_properties={self.EVENT_PROCESSED: True}
+                    )
+                except Exception as e:
+                    raise CalendarError(
+                        f"Couldn't directly add attendance event: {str(e)}")
+            else:
+                raise CalendarError(
+                    f"Couldn't approve attendance event: {str(hte)}")
+        except Exception as e:
+            raise CalendarError(f"Approving attendance event failed: {str(e)}")
 
     async def update_manual_events(self):
         for office in self._office_list.keys():
@@ -227,20 +253,20 @@ class GoogleCalendarHandler:
                 search_params = {"timeMin": time_min, "timeMax": time_max}
 
             try:
-                print(search_params)
                 events = await self._get_events(
-                    self._office_list.get_id(office), **search_params
+                    self._office_list[office], **search_params
                 )
-                print("searched")
                 break
             except HTTPError as e:
-                print(e)
                 if e.res.status_code == 410:
                     # Token is expired, let's repeat with time range
+                    logger.debug("Calendar update token expired, "
+                                 "searching by time range.")
                     search_params = {}
                 else:
-                    # TODO raise some other exception
-                    break
+                    msg = f"Error updating from manual events: {str(e)} "
+                    logger.error(msg)
+                    raise CalendarError(msg)
 
         # Let's get new sync token
         new_sync_token = events["nextSyncToken"]

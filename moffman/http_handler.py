@@ -139,18 +139,13 @@ class HttpHandler:
 
     async def _process_reservation(self, request):
         reservation_payload = await request.json()
-
         try:
             if self._on_reservation_clbk is not None:
                 resp = await self._on_reservation_clbk(reservation_payload)
             else:
-                raise RestApiError("Form request processing not defined.")
+                raise RestApiError("Reservatin request processing not defined.")
         except Exception as e:
-            user = reservation_payload.get("user", {"name": "Unknown"})
-            msg = f"Error processing attendance reservation " \
-                  f"{user['name']}: {str(e)}"
-            self._logger.error(msg)
-            return web.json_response({}, status=500, reason=msg)
+            return web.json_response({}, status=500, reason=str(e))
 
         return web.Response()
 

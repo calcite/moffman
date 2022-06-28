@@ -8,7 +8,6 @@
 import asyncio
 import logging
 import json
-import datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -99,23 +98,29 @@ class MultiOfficeManager:
         await self._calendar_handler.assert_calendars_added()
 
     async def _on_attendance_reservation(self, reservation_payload):
-        if reservation_payload["approved"]:
-            # TODO - add checking in case of non-existent event!
-            await self._calendar_handler.approve_attendance_event(
-                reservation_payload["user"]["name"],
-                reservation_payload["request_dt"],
-                reservation_payload["start"],
-                reservation_payload["end"],
-                reservation_payload["office_id"]
-            )
-        else:
-            await self._calendar_handler.add_unapproved_attendance_event(
-                reservation_payload["user"]["name"],
-                reservation_payload["request_dt"],
-                reservation_payload["start"],
-                reservation_payload["end"],
-                reservation_payload["office_id"]
-            )
+        try:
+            if reservation_payload["approved"]:
+                await self._calendar_handler.approve_attendance_event(
+                    reservation_payload["user"]["name"],
+                    reservation_payload["request_dt"],
+                    reservation_payload["start"],
+                    reservation_payload["end"],
+                    reservation_payload["office_id"]
+                )
+            else:
+                await self._calendar_handler.add_unapproved_attendance_event(
+                    reservation_payload["user"]["name"],
+                    reservation_payload["request_dt"],
+                    reservation_payload["start"],
+                    reservation_payload["end"],
+                    reservation_payload["office_id"]
+                )
+        except Exception as e:
+            user = reservation_payload.get("user", {"name": "Unknown"})
+            logger.error(f"Error processing attendance reservation "
+                         f"{user['name']}: {str(e)}"
+                         )
+            raise e
 
     def start(self):
 
