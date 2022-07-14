@@ -34,10 +34,16 @@ class DynamicConfigManager(Mapping, metaclass=ABCMeta):
         self._spreadsheet_handler = spreadsheet_handler
         self._has_dynamic_config = self._is_google_config_set()
         self._last_update = None
+        self._updated = asyncio.Event()
 
         # Initial dynamic update
         if self._has_dynamic_config:
             self._loop.create_task(self.update_dynamic_config())
+        else:
+            self._updated.set()
+
+    async def is_updated(self):
+        await self._updated.wait()
 
     def _is_google_config_set(self):
         try:
@@ -53,7 +59,7 @@ class DynamicConfigManager(Mapping, metaclass=ABCMeta):
             return True
 
         if self._has_dynamic_config:
-            return item in self._dynamic_users
+            return item in self._dynamic_items
         else:
             return False
 
@@ -86,6 +92,8 @@ class DynamicConfigManager(Mapping, metaclass=ABCMeta):
 
     @abstractmethod
     async def update_dynamic_config(self):
+        self._updated.clear()
+
         data = await self._spreadsheet_handler.get_range(
             self._google_config["sheet_id"],
             self._google_config["range"]
@@ -122,6 +130,7 @@ class ManualUserManager(DynamicConfigManager):
         for name, email in data["values"]:
             self._dynamic_items[email] = name
 
+        self._updated.set()
         logger.debug("User manager updated from spreadsheet.")
 
 
@@ -148,5 +157,6 @@ class OfficeManager(DynamicConfigManager):
         for office_id, calendar_id in data["values"]:
             self._dynamic_items[office_id] = calendar_id
 
+        self._updated.set()
         logger.debug("Office list updated from spreadsheet.")
 

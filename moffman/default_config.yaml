@@ -5,6 +5,12 @@ general:
         oc_schema:
             type: integer
 
+    storage_path:  # Path to a persistant storage file (for storing tokens etc.). Keep null not to use persistent storage.
+        oc_default: "moffman_store.dbm"
+        oc_schema:
+            type: string
+            nullable: true
+
 google_api:
     service_account_key_path: # Path to the Google API credentials JSON file
         oc_default: null
@@ -40,6 +46,18 @@ offices:  # Offices managed by this application
         update_interval: null
         oc_schema: google_config_item
 
+forms:  # Byroapi (https://github.com/calcite/byroapi) form-filler configuration
+    template: null
+    url: null
+    date_format: "DD.MM.YYYY"
+    email:
+        from: {}
+        to: {}
+        cc: {}
+        subject: ""
+        contents: ""
+        attachments: null
+
 calendar:
 #    calendar_id:  # ID of the calendar to be used for attendance.
 #        oc_default: null
@@ -60,6 +78,9 @@ calendar:
             weeks: -1
         max:
             weeks: 2
+    date_format: "YYYY-MM-DD"
+    end_date_corrective:
+        days: -1
 
 rest_api:  # Configuration of the REST API endpoint
     addr: 0.0.0.0
