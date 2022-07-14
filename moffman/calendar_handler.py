@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 import arrow
 
 from .dynamic_configs import ManualUserManager, OfficeManager
+from .persistent_store import PersistentStorage
 from .utils import MoffmanError
 
 
@@ -54,11 +55,16 @@ class GoogleCalendarHandler:
     EVENT_PROCESSED = "event_processed"
 
     def __init__(self, config, service_account_key, office_list: OfficeManager,
-                 manual_user_list: ManualUserManager, loop=None):
+                 manual_user_list: ManualUserManager,
+                 persistent_store: PersistentStorage,
+                 manual_event_process_clbk=None,
+                 loop=None):
 
         self._config = config
         self._manual_user_list = manual_user_list
         self._office_list = office_list
+        self._storage = persistent_store
+        self._manual_event_process_clbk = manual_event_process_clbk
         self._loop = loop or asyncio.get_event_loop()
 
         # Initialize credentials
@@ -72,10 +78,6 @@ class GoogleCalendarHandler:
 
         # Other defaults
         # self._calendar_id = self._config["calendar_id"]
-
-        # Sync token
-        self._int_sync_tokens = {office: None for office in
-                                 self._office_list.keys()}
 
         # Check if all calendars in the office list are added in the
         # service account's calendar list
@@ -112,12 +114,13 @@ class GoogleCalendarHandler:
                 logger.info(f"Added calendar {cal_id}.")
 
     def _get_sync_token(self, office):
-        # TODO - handle persistence
-        return self._int_sync_tokens[office]
+        try:
+            return self._storage.get("CALENDAR", office)
+        except KeyError:
+            return None
 
     def _store_sync_token(self, office, token):
-        # TODO - handle persistence
-        self._int_sync_tokens[office] = token
+        self._storage.store(token, "CALENDAR", office)
 
     def _is_event_unprocessed(self, event):
         try:
@@ -168,8 +171,7 @@ class GoogleCalendarHandler:
             return await aiogoogle.as_service_account(
                 calendar_v3.events.insert(calendarId=calendar, json=event))
 
-    async def _modify_event(self, event_id, start_date, end_date, calendar,
-                            **modifications):
+    async def _modify_event(self, event_id, calendar, **modifications):
         async with self._calendar_api() as (aiogoogle, calendar_v3):
             return await aiogoogle.as_service_account(
                 calendar_v3.events.patch(calendarId=calendar, eventId=event_id,
@@ -183,6 +185,14 @@ class GoogleCalendarHandler:
         async with self._calendar_api() as (aiogoogle, calendar_v3):
             return await aiogoogle.as_service_account(
                 calendar_v3.events.list(calendarId=calendar_id, **params))
+
+    async def _approve_event(self, event_id, office, **modifications):
+        modifications["colorId"] = self._config["colors"]["approved"]
+        modifications["extendedProperties"] = {
+            "private": {self.EVENT_PROCESSED: True}
+        }
+        return await self._modify_event(event_id, self._office_list[office],
+                                        **modifications)
 
     async def add_unapproved_attendance_event(self, person, request_dt,
                                               start_date, end_date, office):
@@ -202,14 +212,8 @@ class GoogleCalendarHandler:
         person_name = person
         event_id = get_event_id(person, request_dt, start_date, end_date)
         try:
-            return await self._modify_event(event_id, start_date, end_date,
-                                            self._office_list[office],
-                                            summary=person_name,
-                                            colorId=self._config["colors"][
-                                                "approved"],
-                                            extendedProperties={"private": {
-                                                self.EVENT_PROCESSED: True}}
-                                            )
+            return await self._approve_event(event_id, office,
+                                             summary=person_name)
         except HTTPError as hte:
             if hte.res.status_code == 404:
                 # Unapproved event doesn't exist, let's make new one
@@ -232,10 +236,12 @@ class GoogleCalendarHandler:
             raise CalendarError(f"Approving attendance event failed: {str(e)}")
 
     async def update_manual_events(self):
+        logger.debug("Updating manual events.")
         for office in self._office_list.keys():
             await self.process_new_manual_events(office)
 
     async def process_new_manual_events(self, office):
+        logger.debug("Processing manual events for office: %s", office)
         search_params = {}
 
         # If we have sync token, let's use it
@@ -280,10 +286,28 @@ class GoogleCalendarHandler:
                                manual_events)
 
         for event in manual_events:
-            # TODO: Do the actual form-filling
-            print(event)
+            try:
+                if self._manual_event_process_clbk is not None:
+                    await self._manual_event_process_clbk(event)
+                else:
+                    raise MoffmanError(
+                        "Manual event processing callback not set."
+                    )
 
-            # TODO: Update the event so that it's marked as processed
+                # Update the event so that it's marked as processed
+                event_id = event["id"]
+                name = self._manual_user_list[event["creator"]["email"]]
+                await self._approve_event(event_id, office, summary=name)
+
+            except MoffmanError as me:
+                logger.error("Could not process manual event: %s", str(me))
+            except HTTPError as hte:
+                logger.error("Failed to approve manual event: %s", str(hte))
+            except Exception as e:
+                logger.error(
+                    "Unexpected error during manual event processing: %s",
+                    str(e)
+                )
 
         # Update sync token (now disabled for debug)
-        # self._store_sync_token(office, new_sync_token)
+        self._store_sync_token(office, new_sync_token)

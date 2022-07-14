@@ -8,13 +8,16 @@
 import asyncio
 import logging
 import json
+from copy import deepcopy
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import arrow
 
 from .http_handler import HttpHandler
 from .calendar_handler import GoogleCalendarHandler
 from .spreadsheet_handler import GoogleSpreadsheetHandler
 from .dynamic_configs import ManualUserManager, OfficeManager
+from .persistent_store import PersistentStorage
 
 
 logger = logging.getLogger("moffman")
@@ -50,12 +53,20 @@ class MultiOfficeManager:
             spreadsheet_handler=self._spreadsheet_handler
         )
 
+        # Persistent store
+        self._persistent_store = PersistentStorage(
+            self._config["general"]["storage_path"]
+        )
+
         # Calendar handling
         self._calendar_handler = GoogleCalendarHandler(
             self._config["calendar"],
             self._service_account_key,
             self._office_manager,
-            self._manual_user_manager
+            self._manual_user_manager,
+            self._persistent_store,
+            manual_event_process_clbk=self._on_manual_event_process,
+            loop=self._loop
         )
 
         # REST API
@@ -90,12 +101,59 @@ class MultiOfficeManager:
 
     async def check_calendar_for_manual_events(self):
         logger.debug("Running manual event update task.")
+        await self._manual_user_manager.is_updated()
+        await self._office_manager.is_updated()
         await self._calendar_handler.update_manual_events()
 
     async def _on_dynamic_config_update(self):
         await self._office_manager.update_dynamic_config()
         await self._manual_user_manager.update_dynamic_config()
         await self._calendar_handler.assert_calendars_added()
+
+    async def _on_manual_event_process(self, event):
+        # Check if there is any form-filling configuration
+        if (None in (self._config["forms"]["template"],
+                     self._config["forms"]["url"],
+                     )):
+            logger.info("No form filling configuration present, "
+                        "skipping manual event processing.")
+            return
+
+        date_from = arrow.get(event["start"]["date"], self._config["calendar"][
+            "date_format"])
+        date_to = arrow.get(
+            event["end"]["date"],
+            self._config["calendar"]["date_format"]
+        ).shift(**self._config["calendar"]["end_date_corrective"])
+
+        date_approved = arrow.get(event["updated"])
+        if date_approved > date_from:
+            # Fix approval date so that it precedes the start date
+            diff = (date_approved - date_from).days + 1
+            date_approved = date_approved.shift(days=-diff)
+
+        email_config = deepcopy(self._config["forms"]["email"])
+        user_email = event["creator"]["email"]
+        user_name = self._manual_user_manager[user_email]
+        email_config["cc"][user_email] = user_name
+
+        form_request = {
+            "template": self._config["forms"]["template"],
+            "form_data": {
+                "user_id": user_email,
+                "date_from": date_from.format(
+                    self._config["forms"]["date_format"]),
+                "date_to": date_to.format(
+                    self._config["forms"]["date_format"]),
+                "date_approved": date_approved.format(
+                    self._config["forms"]["date_format"]),
+            },
+            "result": {
+                "download": False,
+                "email": email_config
+            }
+        }
+        pass
 
     async def _on_attendance_reservation(self, reservation_payload):
         try:
@@ -124,9 +182,6 @@ class MultiOfficeManager:
 
     def start(self):
 
-        # Run initial manual event check
-        self._loop.create_task(self.check_calendar_for_manual_events())
-
         # REST API
         self._http_task = self._loop.create_task(self._http_handler.run(
             host=self._config['rest_api']['addr'],
@@ -135,6 +190,9 @@ class MultiOfficeManager:
 
         # Scheduler
         self._scheduler.start()
+
+        # Run initial manual event check
+        self._loop.create_task(self.check_calendar_for_manual_events())
 
     def stop(self):
         # REST API

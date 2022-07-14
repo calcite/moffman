@@ -143,7 +143,9 @@ class HttpHandler:
             if self._on_reservation_clbk is not None:
                 resp = await self._on_reservation_clbk(reservation_payload)
             else:
-                raise RestApiError("Reservatin request processing not defined.")
+                raise RestApiError(
+                    "Reservation request processing not defined."
+                )
         except Exception as e:
             return web.json_response({}, status=500, reason=str(e))
 
@@ -157,6 +159,14 @@ class HttpHandler:
             self._logger.error(msg)
             return web.json_response({}, status=500, reason=msg)
         return web.Response()
+
+    async def post_json(self, url, json_payload):
+        with ClientSession() as session:
+            async with session.post(url, json=json_payload) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    raise RestApiError("POST request error (%s): %d - %s", url,
+                                       resp.status, body)
 
     def _init_router(self):
         # Basic assets
