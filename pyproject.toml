@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "moffman"
-version = "0.1.0"
+version = "0.2.1"
 description = "Microservice for managing team attendance in multiple offices."
 authors = ["Josef Nevrly <josef.nevrly@gmail.com>"]
 license = "MIT license"
@@ -41,7 +41,6 @@ moffman = "moffman.cli:main"
 
 
 [tool.poetry.dev-dependencies]
-bump2version = "^0.5.0"
 pip = "^18.1"
 wheel = "^0.32.1"
 watchdog = "^0.9.0"
@@ -57,6 +56,7 @@ rstcheck = "^3.3.1"
 ptpython = "^2.0.4"
 mypy = "^0.910"
 jupyter = "^1.0.0"
+bump2version = "^1.0.1"
 
 [tool.coverage.run]
 omit = [".*", "*/site-packages/*"]
