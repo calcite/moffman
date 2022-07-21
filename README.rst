@@ -200,5 +200,5 @@ Following API endpoints are currently provided:
   Google Spreadsheet.
 
 
-.. _`JNevrly/cookiecutter-pypackage-poetry`: https://github.com/JNevrly/cookiecutter-pypackage-poetry
 .. _Onacol: https://github.com/calcite/onacol
+.. _Byroapi: https://github.com/calcite/byroapi

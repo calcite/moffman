@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "moffman"
-version = "0.2.1"
+version = "0.2.2"
 description = "Microservice for managing team attendance in multiple offices."
 authors = ["Josef Nevrly <josef.nevrly@gmail.com>"]
 license = "MIT license"
