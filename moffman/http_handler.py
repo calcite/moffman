@@ -161,12 +161,13 @@ class HttpHandler:
         return web.Response()
 
     async def post_json(self, url, json_payload):
-        with ClientSession() as session:
+        async with ClientSession() as session:
             async with session.post(url, json=json_payload) as resp:
                 if resp.status != 200:
                     body = await resp.text()
-                    raise RestApiError("POST request error (%s): %d - %s", url,
-                                       resp.status, body)
+                    raise RestApiError(
+                        f"POST request error ({url}): {resp.status} - {body}"
+                    )
 
     def _init_router(self):
         # Basic assets

@@ -8,7 +8,6 @@
 import asyncio
 import logging
 import json
-from copy import deepcopy
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import arrow
@@ -111,6 +110,12 @@ class MultiOfficeManager:
         await self._calendar_handler.assert_calendars_added()
 
     async def _on_manual_event_process(self, event):
+        logger.debug("Processing event %s from %s (%s - %s)",
+                     event["summary"],
+                     event["creator"]["email"],
+                     event["start"]["date"],
+                     event["end"]["date"]
+                     )
         # Check if there is any form-filling configuration
         if (None in (self._config["forms"]["template"],
                      self._config["forms"]["url"],
@@ -119,6 +124,7 @@ class MultiOfficeManager:
                         "skipping manual event processing.")
             return
 
+        # Handle the dates
         date_from = arrow.get(event["start"]["date"], self._config["calendar"][
             "date_format"])
         date_to = arrow.get(
@@ -132,19 +138,35 @@ class MultiOfficeManager:
             diff = (date_approved - date_from).days + 1
             date_approved = date_approved.shift(days=-diff)
 
-        email_config = deepcopy(self._config["forms"]["email"])
+        # Convert the dates to string
+        date_from = date_from.format(self._config["forms"]["date_format"])
+        date_to = date_to.format(self._config["forms"]["date_format"])
+
         user_email = event["creator"]["email"]
         user_name = self._manual_user_manager[user_email]
-        email_config["cc"][user_email] = user_name
+
+        # Format email
+        email_config = self._config["forms"]["email"].copy_flat()
+        if self._config["forms"]["cc_to_creator"]:
+            email_config["cc"][user_email] = user_name
+
+        email_config["subject"] = email_config["subject"].format(
+            user_name=user_name,
+            date_from=date_from,
+            date_to=date_to
+        )
+        email_config["contents"] = email_config["contents"].format(
+            user_name=user_name,
+            date_from=date_from,
+            date_to=date_to
+        )
 
         form_request = {
             "template": self._config["forms"]["template"],
             "form_data": {
                 "user_id": user_email,
-                "date_from": date_from.format(
-                    self._config["forms"]["date_format"]),
-                "date_to": date_to.format(
-                    self._config["forms"]["date_format"]),
+                "date_from": date_from,
+                "date_to": date_to,
                 "date_approved": date_approved.format(
                     self._config["forms"]["date_format"]),
             },
@@ -153,7 +175,11 @@ class MultiOfficeManager:
                 "email": email_config
             }
         }
-        pass
+
+        await self._http_handler.post_json(
+            self._config["forms"]["url"],
+            form_request
+        )
 
     async def _on_attendance_reservation(self, reservation_payload):
         try:
