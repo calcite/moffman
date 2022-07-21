@@ -285,6 +285,8 @@ class GoogleCalendarHandler:
         manual_events = filter(self._is_event_from_registered_user,
                                manual_events)
 
+        new_batch_done = True
+
         for event in manual_events:
             try:
                 if self._manual_event_process_clbk is not None:
@@ -301,6 +303,7 @@ class GoogleCalendarHandler:
 
             except MoffmanError as me:
                 logger.error("Could not process manual event: %s", str(me))
+                new_batch_done = False
             except HTTPError as hte:
                 logger.error("Failed to approve manual event: %s", str(hte))
             except Exception as e:
@@ -308,6 +311,8 @@ class GoogleCalendarHandler:
                     "Unexpected error during manual event processing: %s",
                     str(e)
                 )
+                new_batch_done = False
 
         # Update sync token (now disabled for debug)
-        self._store_sync_token(office, new_sync_token)
+        if new_batch_done:
+            self._store_sync_token(office, new_sync_token)
