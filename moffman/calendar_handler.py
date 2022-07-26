@@ -136,7 +136,10 @@ class GoogleCalendarHandler:
             return True
 
     def _is_event_from_registered_user(self, event):
-        return event["creator"]["email"] in self._manual_user_list
+        try:
+            return event["creator"]["email"] in self._manual_user_list
+        except KeyError:
+            return False
 
     @asynccontextmanager
     async def _calendar_api(self):
