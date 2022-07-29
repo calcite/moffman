@@ -301,7 +301,8 @@ class GoogleCalendarHandler:
 
                 # Update the event so that it's marked as processed
                 event_id = event["id"]
-                name = self._manual_user_list[event["creator"]["email"]]
+                name = self._manual_user_list[event["creator"]["email"]][
+                    "user_name"]
                 await self._approve_event(event_id, office, summary=name)
 
             except MoffmanError as me:

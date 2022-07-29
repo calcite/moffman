@@ -19,7 +19,7 @@ google_api:
             nullable: false
 
 manual_users:  # = External users that have access only to the Google Docs/Calendar.
-    user_list: []  # List of items in format {id: <user_email>, name: <user_name>}
+    user_list: []  # List of items in format {id: <user_email>, first_name: <xx>, last_name: <yy>, employee_number: <number>}
     google_config:
         sheet_id: # Google Drive ID of the Google spreadsheet file
             oc_default: null
@@ -51,7 +51,7 @@ forms:  # Byroapi (https://github.com/calcite/byroapi) form-filler configuration
     url: null
     date_format: "DD.MM.YYYY"
     cc_to_creator: true
-    email:  # Following variables are available: user_name, date_from, date_to
+    email:  # Following variables are available: first_name, last_name, user_name (=first_name last_name), date_from, date_to, date_approved, employee_number
         from: {}
         to: {}
         cc: {}

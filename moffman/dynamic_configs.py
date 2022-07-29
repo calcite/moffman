@@ -117,7 +117,9 @@ class ManualUserManager(DynamicConfigManager):
         # Initialize static users from config
         static_users = {}
         for static_user in self._config["user_list"]:
-            static_users[static_user["id"]] = static_user["name"]
+            static_user["user_name"] = "{first_name} {last_name}".format(
+                **static_user)
+            static_users[static_user["id"]] = static_user
 
         super().__init__(static_users, self._config["google_config"],
                          loop=loop, spreadsheet_handler=spreadsheet_handler)
@@ -127,8 +129,14 @@ class ManualUserManager(DynamicConfigManager):
     async def update_dynamic_config(self):
         data = await super().update_dynamic_config()
 
-        for name, email in data["values"]:
-            self._dynamic_items[email] = name
+        for email, first_name, last_name, emp_number in data["values"]:
+            self._dynamic_items[email] = {
+                "id": email,
+                "first_name": first_name,
+                "last_name": last_name,
+                "employee_number": emp_number,
+                "user_name": f"{first_name} {last_name}"
+            }
 
         self._updated.set()
         logger.debug("User manager updated from spreadsheet.")

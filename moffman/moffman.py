@@ -8,10 +8,12 @@
 import asyncio
 import logging
 import json
+import copy
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import arrow
 
+from .utils import sanitize_filename
 from .http_handler import HttpHandler
 from .calendar_handler import GoogleCalendarHandler
 from .spreadsheet_handler import GoogleSpreadsheetHandler
@@ -138,44 +140,35 @@ class MultiOfficeManager:
             diff = (date_approved - date_from).days + 1
             date_approved = date_approved.shift(days=-diff)
 
-        # Convert the dates to string
-        date_from = date_from.format(self._config["forms"]["date_format"])
-        date_to = date_to.format(self._config["forms"]["date_format"])
-
         user_email = event["creator"]["email"]
-        user_name = self._manual_user_manager[user_email]
+        context = copy.deepcopy(self._manual_user_manager[user_email])
+
+        # Convert the dates to string
+        context["date_from"] = date_from.format(
+            self._config["forms"]["date_format"])
+        context["date_to"] = date_to.format(
+            self._config["forms"]["date_format"])
+        context["date_approved"] = date_approved.format(
+                    self._config["forms"]["date_format"])
 
         # Format email
         email_config = self._config["forms"]["email"].copy_flat()
         if self._config["forms"]["cc_to_creator"]:
-            email_config["cc"][user_email] = user_name
+            email_config["cc"][user_email] = context["user_name"]
 
-        email_config["subject"] = email_config["subject"].format(
-            user_name=user_name,
-            date_from=date_from,
-            date_to=date_to
-        )
-        email_config["contents"] = email_config["contents"].format(
-            user_name=user_name,
-            date_from=date_from,
-            date_to=date_to
-        )
-
+        email_config["subject"] = email_config["subject"].format(**context)
+        email_config["contents"] = email_config["contents"].format(**context)
         if email_config["attachments"]:
-            email_config["attachments"] = email_config["attachments"].format(
-                user_name=user_name,
-                date_from=date_from,
-                date_to=date_to
-            )
+            email_config["attachments"] = sanitize_filename(
+                email_config["attachments"].format(**context))
 
         form_request = {
             "template": self._config["forms"]["template"],
             "form_data": {
                 "user_id": user_email,
-                "date_from": date_from,
-                "date_to": date_to,
-                "date_approved": date_approved.format(
-                    self._config["forms"]["date_format"]),
+                "date_from": context["date_from"],
+                "date_to": context["date_to"],
+                "date_approved": context["date_approved"],
             },
             "result": {
                 "download": False,
