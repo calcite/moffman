@@ -161,6 +161,13 @@ class MultiOfficeManager:
             date_to=date_to
         )
 
+        if email_config["attachments"]:
+            email_config["attachments"] = email_config["attachments"].format(
+                user_name=user_name,
+                date_from=date_from,
+                date_to=date_to
+            )
+
         form_request = {
             "template": self._config["forms"]["template"],
             "form_data": {
