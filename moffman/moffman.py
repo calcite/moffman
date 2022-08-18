@@ -146,10 +146,16 @@ class MultiOfficeManager:
         # Convert the dates to string
         context["date_from"] = date_from.format(
             self._config["forms"]["date_format"])
+        context["date_from_attachment"] = date_from.format(
+            self._config["forms"]["attachment_date_format"])
         context["date_to"] = date_to.format(
             self._config["forms"]["date_format"])
+        context["date_to_attachment"] = date_to.format(
+            self._config["forms"]["attachment_date_format"])
         context["date_approved"] = date_approved.format(
                     self._config["forms"]["date_format"])
+        context["date_approved_attachment"] = date_approved.format(
+            self._config["forms"]["attachment_date_format"])
 
         # Format email
         email_config = self._config["forms"]["email"].copy_flat()

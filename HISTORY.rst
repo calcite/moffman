@@ -2,6 +2,11 @@
 History
 =======
 
+0.4.0 (2022-08-18)
+------------------
+
+* Added attachment date formatting context.
+
 0.3.0 (2022-07-29)
 ------------------
 
